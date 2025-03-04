@@ -2,14 +2,14 @@ import requests
 import pandas as pd
 from dagster import asset, Output, MetadataValue
 from datetime import datetime, timedelta
-from etl.config.settings import NEWS_API_KEY_2, NEWS_API_URL, TICKERS, FINANCE_KEYWORDS, EXCLUDED_SOURCES
+from etl.config.settings import NEWS_API_KEY, NEWS_API_URL, TICKERS, FINANCE_KEYWORDS, EXCLUDED_SOURCES
 
 @asset
 def daily_asset_news() -> Output[pd.DataFrame]:
     """
     Récupère les actualités financières récentes pour chaque actif à l'aide de NewsAPI.
     """
-    if not NEWS_API_KEY_2:
+    if not NEWS_API_KEY:
         raise ValueError("❌ Clé API manquante ! Ajoutez votre clé NewsAPI.")
 
     articles_list = []
@@ -20,7 +20,7 @@ def daily_asset_news() -> Output[pd.DataFrame]:
 
     for ticker in TICKERS:
         query = f"{ticker} stock OR {ticker} stock price OR {ticker} earnings OR {ticker} stock market OR {ticker} stock news"
-        url = f"{NEWS_API_URL}?q={query}&from={from_date}&to={today}&sortBy=publishedAt&apiKey={NEWS_API_KEY_2}"
+        url = f"{NEWS_API_URL}?q={query}&from={from_date}&to={today}&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
 
         try:
             response = requests.get(url)

@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 import matplotlib.pyplot as plt
 from dagster import asset, Output
@@ -9,6 +10,9 @@ from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 from datetime import datetime, timedelta
 import textwrap
+from etl.config.settings import CLIENT_SECRETS_JSON
+from pydrive2.auth import GoogleAuth
+from pydrive2.drive import GoogleDrive
 
 # 📂 Dossier de sortie pour le PDF
 OUTPUT_DIR = "output"
@@ -136,11 +140,50 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     pdf_canvas.setFont("Helvetica", 10)
     pdf_canvas.drawString(50, 30, f"Generated on {datetime.today().strftime('%Y-%m-%d')} | © Market Data Inc.")
 
-    # 🔹 *Finaliser et enregistrer le PDF*
+    # 🔹 Finaliser et enregistrer le PDF*
     pdf_canvas.save()
     print(f"✅ Rapport PDF généré avec succès : {PDF_OUTPUT_PATH}")
 
-    return Output(
-        PDF_OUTPUT_PATH,
-        metadata={"file_path": PDF_OUTPUT_PATH, "status": "PDF généré avec succès"}
-    )
+    # 🔹 Uploader le PDF sur Google Drive
+    try:
+        # Créer un fichier JSON temporaire avec les secrets
+        with open("client_secrets.json", "w") as f:
+            json.dump(CLIENT_SECRETS_JSON, f)
+
+        # Authentification Google Drive
+        gauth = GoogleAuth()
+        gauth.LoadClientConfigFile("client_secrets.json")
+        gauth.LocalWebserverAuth()
+        drive = GoogleDrive(gauth)
+
+        # Uploader le PDF
+        file_drive = drive.CreateFile({'title': os.path.basename(PDF_OUTPUT_PATH)})
+        file_drive.SetContentFile(PDF_OUTPUT_PATH)
+        file_drive.Upload()
+
+        print(f"✅ PDF uploadé avec succès sur Google Drive : {file_drive['alternateLink']}")
+
+        # Supprimer le fichier JSON temporaire
+        os.remove("client_secrets.json")
+
+        return Output(
+            PDF_OUTPUT_PATH,
+            metadata={
+                "file_path": PDF_OUTPUT_PATH,
+                "google_drive_link": file_drive['alternateLink'],
+                "status": "PDF généré et uploadé avec succès"
+            }
+        )
+
+    except Exception as e:
+        print(f"❌ Erreur lors de l'upload sur Google Drive : {e}")
+        if os.path.exists("client_secrets.json"):
+            os.remove("client_secrets.json")
+
+        return Output(
+            PDF_OUTPUT_PATH,
+            metadata={
+                "file_path": PDF_OUTPUT_PATH,
+                "status": "PDF généré mais échec de l'upload sur Google Drive"
+            }
+        )
