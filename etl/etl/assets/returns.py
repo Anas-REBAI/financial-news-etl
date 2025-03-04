@@ -1,40 +1,51 @@
-from dagster import asset
-import pandas as pd
 import numpy as np
+import pandas as pd
+from dagster import asset, Output, MetadataValue
 
 @asset
-def daily_asset_returns(daily_asset_prices: pd.DataFrame) -> pd.DataFrame:
+def daily_asset_returns(daily_asset_prices: pd.DataFrame) -> Output[pd.DataFrame]:
     """
     Calcule les rendements journaliers simples et logarithmiques pour chaque actif.
     """
+
     if daily_asset_prices.empty:
         print("⚠️ Erreur : Les données de prix sont vides. Retourne un DataFrame vide.")
-        return pd.DataFrame()
+        return Output(pd.DataFrame(), metadata={"status": "Données vides"})
 
     print("✅ Colonnes disponibles dans daily_asset_prices:", daily_asset_prices.columns)
 
-    # Reformater le DataFrame en supprimant "Ticker"
-    prices = daily_asset_prices.set_index("Date").drop(columns=["Ticker"], errors="ignore")
+    # Vérifier qu'on a plusieurs dates
+    unique_dates = daily_asset_prices["Date"].nunique()
+    print(f"📅 Nombre de dates uniques : {unique_dates}")
 
-    # Vérifier qu'on a assez de données
-    if len(prices) < 2:
-        print("⚠️ Pas assez de données pour calculer les rendements.")
-        return pd.DataFrame()
+    if unique_dates < 2:
+        print("❌ Pas assez de dates pour calculer les rendements. Essayez d'augmenter period dans yfinance.")
+        return Output(pd.DataFrame(), metadata={"status": "Pas assez de dates"})
 
-    # Vérification des données
-    print("📊 Aperçu des données de prix :\n", prices.head())
+    # Conversion de Date en datetime
+    daily_asset_prices["Date"] = pd.to_datetime(daily_asset_prices["Date"])
 
-    # Calcul du rendement simple
-    simple_returns = prices.pct_change().reset_index()
-    simple_returns["Return Type"] = "Simple"
+    # Trier les données
+    daily_asset_prices = daily_asset_prices.sort_values(by=["Ticker", "Date"]).copy()
 
-    # Calcul du rendement logarithmique
-    log_returns = np.log(prices / prices.shift(1)).reset_index()
-    log_returns["Return Type"] = "Logarithmic"
+    # Calcul des rendements
+    daily_asset_prices["Simple Return"] = daily_asset_prices.groupby("Ticker")["Adj Close"].pct_change()
+    daily_asset_prices["Log Return"] = daily_asset_prices.groupby("Ticker")["Adj Close"].transform(lambda x: np.log(x / x.shift(1)))
 
-    # Concaténer les deux types de rendement
-    returns_df = pd.concat([simple_returns, log_returns])
+    # Affichage avant suppression des NaN
+    print("📊 Aperçu des rendements AVANT suppression des NaN :")
+    print(daily_asset_prices[["Date", "Ticker", "Simple Return", "Log Return"]].head(10))
 
-    print(f"✅ Calcul des rendements terminé ({len(returns_df)} lignes pour {len(prices.columns)} tickers).")
+    # Supprimer les lignes NaN après le calcul
+    daily_asset_returns = daily_asset_prices.dropna().reset_index(drop=True)
 
-    return returns_df
+    print(f"✅ Calcul des rendements terminé ({len(daily_asset_returns)} lignes après suppression des NaN).")
+    
+    return Output(
+        daily_asset_returns,
+        metadata={
+            "tickers_calculés": len(daily_asset_returns["Ticker"].unique()),
+            "nombre_lignes": daily_asset_returns.shape[0],
+            "aperçu": MetadataValue.md(daily_asset_returns.head().to_markdown()),  # Affichage top 5 dans Dagster UI
+        }
+    )

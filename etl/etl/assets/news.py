@@ -1,41 +1,70 @@
-from dagster import asset
 import requests
 import pandas as pd
-from etl.config.settings import TICKERS, NEWS_API_KEY, NEWS_API_URL
+from dagster import asset, Output, MetadataValue
+from datetime import datetime, timedelta
+from etl.config.settings import NEWS_API_KEY_2, NEWS_API_URL, TICKERS, FINANCE_KEYWORDS, EXCLUDED_SOURCES
 
 @asset
-def daily_asset_news() -> pd.DataFrame:
+def daily_asset_news() -> Output[pd.DataFrame]:
     """
-    Récupère les nouvelles du jour pour les actifs via l'API NewsAPI en regroupant les tickers par lot de 10.
+    Récupère les actualités financières récentes pour chaque actif à l'aide de NewsAPI.
     """
-    all_news = []
-    total_articles = 0  # Compteur
+    if not NEWS_API_KEY_2:
+        raise ValueError("❌ Clé API manquante ! Ajoutez votre clé NewsAPI.")
 
-    # Découper les tickers en groupes de 10
-    for i in range(0, len(TICKERS), 10):
-        tickers_group = TICKERS[i:i+10]  # Prendre 10 tickers à la fois
-        params = {
-            "q": " OR ".join(tickers_group),  # Requête avec plusieurs tickers
-            "apiKey": NEWS_API_KEY,
-            "language": "en",
-            "sortBy": "publishedAt",
-            "pageSize": 50
+    articles_list = []
+    today = datetime.today().strftime('%Y-%m-%d')
+    from_date = (datetime.today() - timedelta(days=7)).strftime('%Y-%m-%d')
+
+    print(f"📅 Récupération des actualités entre {from_date} et {today}...")
+
+    for ticker in TICKERS:
+        query = f"{ticker} stock OR {ticker} stock price OR {ticker} earnings OR {ticker} stock market OR {ticker} stock news"
+        url = f"{NEWS_API_URL}?q={query}&from={from_date}&to={today}&sortBy=publishedAt&apiKey={NEWS_API_KEY_2}"
+
+        try:
+            response = requests.get(url)
+            data = response.json()
+
+            if data["status"] == "ok":
+                for article in data["articles"][:5]:  # On prend max 5 articles par ticker
+                    title = article["title"].lower()
+                    source = article["source"]["name"].lower()
+
+                    # Vérification des mots-clés financiers et exclusion des sources non pertinentes
+                    if any(keyword in title for keyword in FINANCE_KEYWORDS) and source not in EXCLUDED_SOURCES:
+                        articles_list.append({
+                            "Date": article["publishedAt"],
+                            "Ticker": ticker,
+                            "Title": article["title"],
+                            "Source": article["source"]["name"],
+                            "URL": article["url"]
+                        })
+
+            else:
+                print(f"⚠️ Erreur API pour {ticker} : {data}")
+
+        except Exception as e:
+            print(f"❌ Erreur lors de la récupération des news pour {ticker} : {e}")
+
+    # Convertir en DataFrame
+    df_news = pd.DataFrame(articles_list)
+
+    if df_news.empty:
+        print("⚠️ Aucune actualité financière récupérée.")
+        return Output(pd.DataFrame(), metadata={"status": "Aucune actualité pertinente trouvée"})
+
+    # Trier les actualités par date
+    df_news["Date"] = pd.to_datetime(df_news["Date"])
+    df_news = df_news.sort_values(by="Date", ascending=False)
+
+    print(f"✅ {len(df_news)} articles financiers récupérés.")
+
+    return Output(
+        df_news,
+        metadata={
+            "tickers_avec_news": df_news["Ticker"].nunique(),
+            "articles_financiers_récupérés": df_news.shape[0],
+            "aperçu": MetadataValue.md(df_news.head().to_markdown()),  # Afficher un aperçu des news dans Dagster UI
         }
-        response = requests.get(NEWS_API_URL, params=params)
-
-        if response.status_code == 200:
-            articles = response.json().get("articles", [])
-            total_articles += len(articles)  # Ajouter au compteur
-            for article in articles:
-                all_news.append({
-                    "tickers": ", ".join(tickers_group),  # Associer les tickers du groupe
-                    "title": article["title"],
-                    "source": article["source"]["name"],
-                    "publishedAt": article["publishedAt"],
-                    "url": article["url"]
-                })
-        else:
-            print(f"❌ Erreur {response.status_code} pour les tickers {tickers_group}")
-
-    print(f"✅ {total_articles} articles récupérés pour {len(TICKERS)} tickers")
-    return pd.DataFrame(all_news)
+    )

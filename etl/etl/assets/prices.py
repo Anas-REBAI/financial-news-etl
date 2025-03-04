@@ -1,38 +1,29 @@
-from dagster import asset
-import time
+from dagster import Output, asset
 import yfinance as yf
 import pandas as pd
 from etl.config.settings import TICKERS
 
 @asset
-def daily_asset_prices() -> pd.DataFrame:
+def daily_asset_prices() -> Output[pd.DataFrame]:
     """
-    Récupère les prix journaliers ajustés pour une liste de tickers à l'aide de yfinance.
+    Actif Dagster qui récupère les prix journaliers ajustés pour une liste de tickers via yfinance.
     """
-    valid_data = []
-    failed_tickers = []
+    try:
+        # Télécharger toutes les données en une seule requête pour réduire les appels API
+        data = yf.download(TICKERS, period="5d", interval="1d", auto_adjust=False)
+        
+        # Vérification de la présence de la colonne 'Adj Close'
+        if "Adj Close" not in data:
+            raise ValueError("⚠️ 'Adj Close' non trouvé dans les données récupérées.")
 
-    for ticker in TICKERS:
-        try:
-            time.sleep(2)  # Pause pour éviter le blocage
-            data = yf.download(ticker, period="1d", interval="1d", auto_adjust=False)
+        # Transformation du DataFrame en format long (melt) avec les tickers
+        df_final = data["Adj Close"].reset_index().melt(id_vars=["Date"], var_name="Ticker", value_name="Adj Close")
 
-            if "Adj Close" in data.columns:
-                adj_close = data["Adj Close"].reset_index()
-                adj_close['Ticker'] = ticker
-                valid_data.append(adj_close)
-            else:
-                print(f"⚠️ Pas de 'Adj Close' pour {ticker}, colonnes disponibles : {data.columns}")
-                failed_tickers.append(ticker)
-        except Exception as e:
-            print(f"❌ Erreur pour {ticker} : {e}")
-            failed_tickers.append(ticker)
+        # Message de suivi dans Dagster UI
+        return Output(df_final, metadata={
+            "tickers_récupérés": df_final["Ticker"].nunique(),
+            "nombre_lignes": df_final.shape[0],
+        })
 
-    if not valid_data:
-        print("⚠️ Aucune donnée valide récupérée. Retourne un DataFrame vide.")
-        return pd.DataFrame()
-
-    df_final = pd.concat(valid_data)
-    print(f"✅ Données récupérées pour {len(TICKERS) - len(failed_tickers)}/{len(TICKERS)} tickers.")
-    
-    return df_final
+    except Exception as e:
+        raise Exception(f"❌ Erreur lors de la récupération des données : {e}")
