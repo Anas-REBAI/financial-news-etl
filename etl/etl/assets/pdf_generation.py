@@ -14,31 +14,31 @@ from etl.config.settings import CLIENT_SECRETS_JSON
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
-# Dossier de sortie pour le PDF
+# Output directory for the PDF
 OUTPUT_DIR = "output"
 PDF_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "market_recap.pdf")
 GRAPH_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "top_performers.png")
 
-# Assurer que le dossier de sortie existe
+# Ensure the output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 @asset
 def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices: pd.DataFrame, daily_asset_returns: pd.DataFrame) -> Output[str]:
     """
-    Génère un PDF structuré avec :
-    1️⃣ Tableau des prix et rendements de TOUS les actifs (AFFICHÉ EN 2 COLONNES).
-    2️⃣ Graphique des *top 5* meilleures performances.
-    3️⃣ Liste complète des actualités financières (avec gestion des longues lignes).
+    Generates a structured PDF containing:
+    1️⃣ A table of prices and returns for ALL assets.
+    2️⃣ A chart of the top 5 best-performing assets.
+    3️⃣ A full list of financial news (with handling for long lines).
     """
 
-    # Vérification des données
+    # Data validation
     if daily_asset_news.empty or daily_asset_prices.empty or daily_asset_returns.empty:
-        print("⚠️ Aucune donnée disponible pour générer le PDF.")
-        return Output(None, metadata={"status": "Pas de données disponibles"})
+        print("⚠️ No available data to generate the PDF.")
+        return Output(None, metadata={"status": "No available data"})
 
-    print("📄 Génération du rapport PDF...")
+    print("📄 Generating PDF report...")
 
-    # Limiter les données à la veille
+    # Filter data for the previous day
     yesterday = datetime.today() - timedelta(days=1)
     daily_asset_news["Date"] = pd.to_datetime(daily_asset_news["Date"]).dt.tz_localize(None)
     daily_asset_returns["Date"] = pd.to_datetime(daily_asset_returns["Date"]).dt.tz_localize(None)
@@ -46,21 +46,21 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     daily_asset_news = daily_asset_news[daily_asset_news["Date"].dt.date == yesterday.date()]
     daily_asset_returns = daily_asset_returns[daily_asset_returns["Date"].dt.date == yesterday.date()]
 
-    # Éviter les doublons
+    # Remove duplicates
     daily_asset_returns = daily_asset_returns.drop_duplicates(subset=["Ticker"], keep="last")
 
-    # Création du PDF
+    # Create the PDF
     pdf_canvas = canvas.Canvas(PDF_OUTPUT_PATH, pagesize=letter)
     pdf_canvas.setTitle("Market Recap Report")
 
-    # Page 1 - Tableau des prix et rendements (AFFICHÉ EN 2 COLONNES)
+    # Page 1 - Prices and returns table (DISPLAYED IN 2 COLUMNS)
     pdf_canvas.setFont("Helvetica-Bold", 18)
     pdf_canvas.drawString(200, 750, "📊 Daily Market Recap")
 
     pdf_canvas.setFont("Helvetica-Bold", 14)
     pdf_canvas.drawString(50, 720, "📈 Daily Prices & Returns (All Assets):")
 
-    # Diviser le tableau en 2 colonnes
+    # Split the table into 2 columns
     mid_index = len(daily_asset_returns) // 2
     left_data = [["Ticker", "Adj Close", "Simple Return (%)"]] + \
                 daily_asset_returns.iloc[:mid_index][["Ticker", "Adj Close", "Simple Return"]].round(4).values.tolist()
@@ -84,20 +84,20 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     left_table.setStyle(table_style)
     right_table.setStyle(table_style)
 
-    # Positionner les 2 colonnes du tableau
+    # Position the 2 table columns
     left_table.wrapOn(pdf_canvas, 250, 500)
     right_table.wrapOn(pdf_canvas, 250, 500)
 
     left_table.drawOn(pdf_canvas, 50, 200) 
     right_table.drawOn(pdf_canvas, 320, 200)
 
-    pdf_canvas.showPage()  # Nouvelle page pour le graphique
+    pdf_canvas.showPage()  # New page for the chart
 
-    # Page 2 - Graphique des top 5 meilleurs rendements
+    # Page 2 - Top 5 performers chart
     pdf_canvas.setFont("Helvetica-Bold", 18)
     pdf_canvas.drawString(180, 750, "📈 Top 5 Performers of the Day")
 
-    # *Graphique des meilleures performances*
+    # *Top 5 performance chart*
     top_returns = daily_asset_returns.sort_values(by="Simple Return", ascending=False).head(5)
 
     if not top_returns.empty:
@@ -109,13 +109,13 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
         plt.savefig(GRAPH_OUTPUT_PATH)
         plt.close()
 
-        # Ajouter le graphique au PDF
+        # Add the chart to the PDF
         img = ImageReader(GRAPH_OUTPUT_PATH)
         pdf_canvas.drawImage(img, 100, 300, width=400, height=250)
 
-    pdf_canvas.showPage()  # *Nouvelle page pour les actualités*
+    pdf_canvas.showPage()  # *New page for news*
 
-    # *Page 3 - Actualités financières*
+    # *Page 3 - Financial news*
     pdf_canvas.setFont("Helvetica-Bold", 18)
     pdf_canvas.drawString(180, 750, "📰 Key News of the Day")
 
@@ -123,47 +123,47 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     y_position = 720
     for index, row in daily_asset_news.iterrows():
         text = f"• {row['Title']} ({row['Source']})"
-        wrapped_text = textwrap.wrap(text, width=80)  # *Retour automatique à la ligne*
+        wrapped_text = textwrap.wrap(text, width=80)  # *Automatic line wrapping*
         
         for line in wrapped_text:
             pdf_canvas.drawString(50, y_position, line)
-            y_position -= 15  # *Décalage vertical pour chaque ligne*
+            y_position -= 15  # *Vertical spacing for each line*
 
-        y_position -= 10  # *Espacement entre chaque article*
+        y_position -= 10  # *Spacing between articles*
 
-        if y_position < 50:  # *Nouvelle page si trop de texte*
+        if y_position < 50:  # *New page if too much text*
             pdf_canvas.showPage()
             pdf_canvas.setFont("Helvetica", 11)
             y_position = 750
 
-    # *Pied de page*
+    # *Footer*
     pdf_canvas.setFont("Helvetica", 10)
     pdf_canvas.drawString(50, 30, f"Generated on {datetime.today().strftime('%Y-%m-%d')} | © Market Data Inc.")
 
-    # Finaliser et enregistrer le PDF
+    # Finalize and save the PDF
     pdf_canvas.save()
-    print(f"✅ Rapport PDF généré avec succès : {PDF_OUTPUT_PATH}")
+    print(f"✅ PDF report successfully generated: {PDF_OUTPUT_PATH}")
 
-    # Uploader le PDF sur Google Drive
+    # Upload PDF to Google Drive
     try:
-        # Créer un fichier JSON temporaire avec les secrets
+        # Create a temporary JSON file with secrets
         with open("client_secrets.json", "w") as f:
             json.dump(CLIENT_SECRETS_JSON, f)
 
-        # Authentification Google Drive
+        # Google Drive authentication
         gauth = GoogleAuth()
         gauth.LoadClientConfigFile("client_secrets.json")
         gauth.LocalWebserverAuth()
         drive = GoogleDrive(gauth)
 
-        # Uploader le PDF
+        # Upload the PDF
         file_drive = drive.CreateFile({'title': os.path.basename(PDF_OUTPUT_PATH)})
         file_drive.SetContentFile(PDF_OUTPUT_PATH)
         file_drive.Upload()
 
-        print(f"✅ PDF uploadé avec succès sur Google Drive : {file_drive['alternateLink']}")
+        print(f"✅ PDF successfully uploaded to Google Drive: {file_drive['alternateLink']}")
 
-        # Supprimer le fichier JSON temporaire
+        # Remove temporary JSON file
         os.remove("client_secrets.json")
 
         return Output(
@@ -171,12 +171,12 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
             metadata={
                 "local_file_path": PDF_OUTPUT_PATH,
                 "google_drive_link": file_drive['alternateLink'],
-                "status": "✅ PDF généré et uploadé avec succès"
+                "status": "✅ PDF generated and successfully uploaded"
             }
         )
 
     except Exception as e:
-        print(f"❌ Erreur lors de l'upload sur Google Drive : {e}")
+        print(f"❌ Error uploading to Google Drive: {e}")
         if os.path.exists("client_secrets.json"):
             os.remove("client_secrets.json")
 
@@ -184,6 +184,6 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
             PDF_OUTPUT_PATH,
             metadata={
                 "file_path": PDF_OUTPUT_PATH,
-                "status": "❌ PDF généré mais échec de l'upload sur Google Drive"
+                "status": "❌ PDF generated but failed to upload to Google Drive"
             }
         )

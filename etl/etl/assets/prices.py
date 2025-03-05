@@ -1,4 +1,4 @@
-from dagster import Output, asset
+from dagster import Output, asset, MetadataValue
 import yfinance as yf
 import pandas as pd
 from etl.config.settings import TICKERS
@@ -6,7 +6,7 @@ from etl.config.settings import TICKERS
 @asset
 def daily_asset_prices() -> Output[pd.DataFrame]:
     """
-    Dagster asset that retrieves daily adjusted prices for a list of tickers using yfinance.
+    Retrieves daily adjusted prices for a list of tickers using yfinance.
     """
     try:
         # Download all data in a single request to minimize API calls
@@ -23,6 +23,7 @@ def daily_asset_prices() -> Output[pd.DataFrame]:
         return Output(df_final, metadata={
             "retrieved_tickers": df_final["Ticker"].nunique(),
             "number_of_rows": df_final.shape[0],
+            "preview": MetadataValue.md(df_final.to_markdown()),
         })
     except Exception as e:
         raise Exception(f"❌ Error while retrieving data: {e}")
