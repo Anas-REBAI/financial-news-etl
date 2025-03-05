@@ -6,24 +6,23 @@ from etl.config.settings import TICKERS
 @asset
 def daily_asset_prices() -> Output[pd.DataFrame]:
     """
-    Actif Dagster qui récupère les prix journaliers ajustés pour une liste de tickers via yfinance.
+    Dagster asset that retrieves daily adjusted prices for a list of tickers using yfinance.
     """
     try:
-        # Télécharger toutes les données en une seule requête pour réduire les appels API
+        # Download all data in a single request to minimize API calls
         data = yf.download(TICKERS, period="5d", interval="1d", auto_adjust=False)
         
-        # Vérification de la présence de la colonne 'Adj Close'
+        # Check for the presence of the 'Adj Close' column
         if "Adj Close" not in data:
-            raise ValueError("⚠️ 'Adj Close' non trouvé dans les données récupérées.")
+            raise ValueError("⚠️ 'Adj Close' not found in the retrieved data.")
 
-        # Transformation du DataFrame en format long (melt) avec les tickers
+        # Transform the DataFrame into long format (melt) with tickers
         df_final = data["Adj Close"].reset_index().melt(id_vars=["Date"], var_name="Ticker", value_name="Adj Close")
 
-        # Message de suivi dans Dagster UI
+        # Tracking message for Dagster UI
         return Output(df_final, metadata={
-            "tickers_récupérés": df_final["Ticker"].nunique(),
-            "nombre_lignes": df_final.shape[0],
+            "retrieved_tickers": df_final["Ticker"].nunique(),
+            "number_of_rows": df_final.shape[0],
         })
-
     except Exception as e:
-        raise Exception(f"❌ Erreur lors de la récupération des données : {e}")
+        raise Exception(f"❌ Error while retrieving data: {e}")

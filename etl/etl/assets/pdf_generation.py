@@ -14,12 +14,12 @@ from etl.config.settings import CLIENT_SECRETS_JSON
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
-# 📂 Dossier de sortie pour le PDF
+# Dossier de sortie pour le PDF
 OUTPUT_DIR = "output"
 PDF_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "market_recap.pdf")
 GRAPH_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "top_performers.png")
 
-# 📌 Assurer que le dossier de sortie existe
+# Assurer que le dossier de sortie existe
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 @asset
@@ -31,14 +31,14 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     3️⃣ Liste complète des actualités financières (avec gestion des longues lignes).
     """
 
-    # ✅ Vérification des données
+    # Vérification des données
     if daily_asset_news.empty or daily_asset_prices.empty or daily_asset_returns.empty:
         print("⚠️ Aucune donnée disponible pour générer le PDF.")
         return Output(None, metadata={"status": "Pas de données disponibles"})
 
     print("📄 Génération du rapport PDF...")
 
-    # 🔹 *Limiter les données à la veille*
+    # Limiter les données à la veille
     yesterday = datetime.today() - timedelta(days=1)
     daily_asset_news["Date"] = pd.to_datetime(daily_asset_news["Date"]).dt.tz_localize(None)
     daily_asset_returns["Date"] = pd.to_datetime(daily_asset_returns["Date"]).dt.tz_localize(None)
@@ -46,21 +46,21 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     daily_asset_news = daily_asset_news[daily_asset_news["Date"].dt.date == yesterday.date()]
     daily_asset_returns = daily_asset_returns[daily_asset_returns["Date"].dt.date == yesterday.date()]
 
-    # ✅ *Éviter les doublons*
+    # Éviter les doublons
     daily_asset_returns = daily_asset_returns.drop_duplicates(subset=["Ticker"], keep="last")
 
-    # 📌 *Création du PDF*
+    # Création du PDF
     pdf_canvas = canvas.Canvas(PDF_OUTPUT_PATH, pagesize=letter)
     pdf_canvas.setTitle("Market Recap Report")
 
-    # 📌 *Page 1 - Tableau des prix et rendements (AFFICHÉ EN 2 COLONNES)*
+    # Page 1 - Tableau des prix et rendements (AFFICHÉ EN 2 COLONNES)
     pdf_canvas.setFont("Helvetica-Bold", 18)
     pdf_canvas.drawString(200, 750, "📊 Daily Market Recap")
 
     pdf_canvas.setFont("Helvetica-Bold", 14)
     pdf_canvas.drawString(50, 720, "📈 Daily Prices & Returns (All Assets):")
 
-    # ✅ *Diviser le tableau en 2 colonnes*
+    # Diviser le tableau en 2 colonnes
     mid_index = len(daily_asset_returns) // 2
     left_data = [["Ticker", "Adj Close", "Simple Return (%)"]] + \
                 daily_asset_returns.iloc[:mid_index][["Ticker", "Adj Close", "Simple Return"]].round(4).values.tolist()
@@ -84,16 +84,16 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     left_table.setStyle(table_style)
     right_table.setStyle(table_style)
 
-    # 📌 *Positionner les 2 colonnes du tableau*
+    # Positionner les 2 colonnes du tableau
     left_table.wrapOn(pdf_canvas, 250, 500)
     right_table.wrapOn(pdf_canvas, 250, 500)
 
-    left_table.drawOn(pdf_canvas, 50, 200)  # 📌 *Colonne de gauche*
-    right_table.drawOn(pdf_canvas, 320, 200)  # 📌 *Colonne de droite*
+    left_table.drawOn(pdf_canvas, 50, 200) 
+    right_table.drawOn(pdf_canvas, 320, 200)
 
-    pdf_canvas.showPage()  # 📝 *Nouvelle page pour le graphique*
+    pdf_canvas.showPage()  # Nouvelle page pour le graphique
 
-    # 📌 *Page 2 - Graphique des top 5 meilleurs rendements*
+    # Page 2 - Graphique des top 5 meilleurs rendements
     pdf_canvas.setFont("Helvetica-Bold", 18)
     pdf_canvas.drawString(180, 750, "📈 Top 5 Performers of the Day")
 
