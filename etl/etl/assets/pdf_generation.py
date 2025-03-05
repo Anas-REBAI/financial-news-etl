@@ -97,7 +97,7 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     pdf_canvas.setFont("Helvetica-Bold", 18)
     pdf_canvas.drawString(180, 750, "📈 Top 5 Performers of the Day")
 
-    # ✅ *Graphique des meilleures performances*
+    # *Graphique des meilleures performances*
     top_returns = daily_asset_returns.sort_values(by="Simple Return", ascending=False).head(5)
 
     if not top_returns.empty:
@@ -113,9 +113,9 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
         img = ImageReader(GRAPH_OUTPUT_PATH)
         pdf_canvas.drawImage(img, 100, 300, width=400, height=250)
 
-    pdf_canvas.showPage()  # 📝 *Nouvelle page pour les actualités*
+    pdf_canvas.showPage()  # *Nouvelle page pour les actualités*
 
-    # 📌 *Page 3 - Actualités financières*
+    # *Page 3 - Actualités financières*
     pdf_canvas.setFont("Helvetica-Bold", 18)
     pdf_canvas.drawString(180, 750, "📰 Key News of the Day")
 
@@ -123,28 +123,28 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
     y_position = 720
     for index, row in daily_asset_news.iterrows():
         text = f"• {row['Title']} ({row['Source']})"
-        wrapped_text = textwrap.wrap(text, width=80)  # 📌 *Retour automatique à la ligne*
+        wrapped_text = textwrap.wrap(text, width=80)  # *Retour automatique à la ligne*
         
         for line in wrapped_text:
             pdf_canvas.drawString(50, y_position, line)
-            y_position -= 15  # 📌 *Décalage vertical pour chaque ligne*
+            y_position -= 15  # *Décalage vertical pour chaque ligne*
 
-        y_position -= 10  # 📌 *Espacement entre chaque article*
+        y_position -= 10  # *Espacement entre chaque article*
 
-        if y_position < 50:  # 📌 *Nouvelle page si trop de texte*
+        if y_position < 50:  # *Nouvelle page si trop de texte*
             pdf_canvas.showPage()
             pdf_canvas.setFont("Helvetica", 11)
             y_position = 750
 
-    # 📌 *Pied de page*
+    # *Pied de page*
     pdf_canvas.setFont("Helvetica", 10)
     pdf_canvas.drawString(50, 30, f"Generated on {datetime.today().strftime('%Y-%m-%d')} | © Market Data Inc.")
 
-    # 🔹 Finaliser et enregistrer le PDF*
+    # Finaliser et enregistrer le PDF
     pdf_canvas.save()
     print(f"✅ Rapport PDF généré avec succès : {PDF_OUTPUT_PATH}")
 
-    # 🔹 Uploader le PDF sur Google Drive
+    # Uploader le PDF sur Google Drive
     try:
         # Créer un fichier JSON temporaire avec les secrets
         with open("client_secrets.json", "w") as f:
@@ -169,9 +169,9 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
         return Output(
             PDF_OUTPUT_PATH,
             metadata={
-                "file_path": PDF_OUTPUT_PATH,
+                "local_file_path": PDF_OUTPUT_PATH,
                 "google_drive_link": file_drive['alternateLink'],
-                "status": "PDF généré et uploadé avec succès"
+                "status": "✅ PDF généré et uploadé avec succès"
             }
         )
 
@@ -184,6 +184,6 @@ def generate_market_recap_pdf(daily_asset_news: pd.DataFrame, daily_asset_prices
             PDF_OUTPUT_PATH,
             metadata={
                 "file_path": PDF_OUTPUT_PATH,
-                "status": "PDF généré mais échec de l'upload sur Google Drive"
+                "status": "❌ PDF généré mais échec de l'upload sur Google Drive"
             }
         )

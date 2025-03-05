@@ -1,12 +1,13 @@
+import pytest
+import pandas as pd
 from etl.assets.prices import daily_asset_prices
 
-# Test 1 : Vérifier que `daily_asset_prices` retourne bien un DataFrame structuré
 def test_daily_asset_prices():
-    df_prices = daily_asset_prices().value  # .value pour accéder au DataFrame de l'Output Dagster
+    """Test if daily_asset_prices returns a structured DataFrame."""
+    df_prices = daily_asset_prices().value  # Extracting the DataFrame from Dagster Output
     
-    # Vérifier que ce n'est pas vide
     assert not df_prices.empty, "❌ daily_asset_prices returned an empty DataFrame"
     
-    # Vérifier que les colonnes essentielles sont bien là
+    # Required columns
     required_columns = {"Date", "Ticker", "Adj Close"}
-    assert required_columns.issubset(df_prices.columns), f"❌ Missing columns in daily_asset_prices: {required_columns - set(df_prices.columns)}"
+    assert required_columns.issubset(df_prices.columns), f"❌ Missing columns: {required_columns - set(df_prices.columns)}"
